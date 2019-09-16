@@ -216,6 +216,7 @@ function _heyloyalty_newsletter_get_nodes($content_types, $context) {
       $node['targetGroup'] = !empty($wrapper->field_target_group) ? $wrapper->field_target_group->label() : 'Kursus';
       $node['targetGroupSub'] = !empty($wrapper->field_target_group_sub) ? _heyloyalty_newsletter_render_target_group_sub($wrapper->field_target_group_sub->value()) : '';
       $node['Beskrivelse_cut'] = strlen($stripped_descr) > 254 ? preg_replace('/\s+?(\S+)?$/', '', mb_substr($stripped_descr, 0, 251)) . '...' : $stripped_descr;
+      $node['Beskrivelse_cut'] = str_replace("\n", " \n", $node['Beskrivelse_cut']);
     }
 
     // Add specific fields for news
@@ -223,6 +224,7 @@ function _heyloyalty_newsletter_get_nodes($content_types, $context) {
       $node['Beskrivelse'] = !empty($wrapper->field_content->value()['safe_value']) ? $wrapper->field_content->value()['safe_value'] : '';
       $stripped_descr = strip_tags($node['Beskrivelse']);
       $node['Beskrivelse_cut'] = strlen($stripped_descr) > 254 ? preg_replace('/\s+?(\S+)?$/', '', mb_substr($stripped_descr, 0, 251)) . '...' : $stripped_descr;
+      $node['Beskrivelse_cut'] = str_replace("\n", " \n", $node['Beskrivelse_cut']);
       $node['Manchet'] = !empty($wrapper->field_teaser->value()) ? $wrapper->field_teaser->value() : '';
     }
 
@@ -232,8 +234,6 @@ function _heyloyalty_newsletter_get_nodes($content_types, $context) {
 
   return $newsletter_nodes;
 }
-
-
 
 /**
  * Implements hook_views_post_render().
@@ -248,7 +248,7 @@ function _heyloyalty_newsletter_render_target_group_sub($target_groups) {
     $name = $value->name;
 
     if (preg_match('/.{1,2} år/', $name) ) {
-      $years[] = str_replace('. år', '', $name);
+      $years[] = str_replace(' år', '', $name);
     }
     else if (preg_match('/.{1,2}\. klasse/', $name) ) {
       $classes[] = str_replace('. klasse', '', $name);
@@ -258,21 +258,79 @@ function _heyloyalty_newsletter_render_target_group_sub($target_groups) {
     }
   }
 
-  $ranges = _ulf_default_create_ranges($classes, '. klasse', '. - ');
-  $yearRanges = _ulf_default_create_ranges($years, ' år');
+  $ranges = _heyloyalty_newsletter_create_ranges($classes, '. klasse', '. - ');
+  $yearRanges = _heyloyalty_newsletter_create_ranges($years, ' år');
 
   if (!empty($ranges)) {
-    $output .= implode('<br>', $ranges) . '<br>';
+    $output .= implode(', ', $ranges) . ', ';
   }
 
   if (!empty($yearRanges)) {
-    $output .= implode('<br>', $yearRanges) . '<br>';
+    $output .= implode(', ', $yearRanges) . ', ';
   }
 
   if (!empty($other_results)) {
-    $output .= implode('<br>', $other_results);
+    $output .= implode(', ', $other_results);
   }
 
+  if (substr($output, -2, 2) == ', ') {
+    $output = substr($output, 0, -2);
+  }
 
   return $output;
+}
+
+
+
+/**
+ * Creates X. klasse ranges from array of numbers.
+ *
+ * @param $arr
+ *   Array of numbers.
+ *
+ * @return array
+ */
+function _heyloyalty_newsletter_create_ranges($arr, $stringEnd, $separator = ' - ')
+{
+  if (empty($arr)) {
+    return $arr;
+  }
+
+  asort($arr);
+
+  $ranges = [];
+  $rangeStart = null;
+  $current = null;
+  $currentEntry = null;;
+
+  foreach ($arr as $key => $entry) {
+    $currentEntry = (int)$entry;
+
+    if (is_null($rangeStart)) {
+      $rangeStart = $currentEntry;
+      $current = $currentEntry;
+      continue;
+    }
+
+    if ($entry - 1 == $current) {
+      $current = $currentEntry;
+      continue;
+    } else {
+      if ($rangeStart < $current) {
+        $ranges[] = $rangeStart.$separator.$current.$stringEnd;
+      } else {
+        $ranges[] = $rangeStart.$stringEnd;
+      }
+      $rangeStart = $currentEntry;
+      $current = $currentEntry;
+    }
+  }
+
+  if ($rangeStart < $current) {
+    $ranges[] = $rangeStart.$separator.$current.$stringEnd;
+  } else {
+    $ranges[] = $rangeStart.$stringEnd;
+  }
+
+  return $ranges;
 }
